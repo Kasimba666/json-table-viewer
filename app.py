@@ -317,13 +317,17 @@ if search_term:
     filtered_df = filtered_df[mask]
 
 # Компактные стили таблицы: меньше отступы и шрифт, чтобы вместить больше строк на экран
+# (сортировка, фильтрация и изменение ширины мышкой работают через st.dataframe)
 st.markdown(
     """
     <style>
-    /* Уменьшаем шрифт и отступы ячеек таблицы */
+    h2, .stSubheader {
+        margin-top: 4px !important;
+        margin-bottom: 4px !important;
+    }
+    /* Компактный шрифт и отступы ячеек */
     div[data-testid="stDataFrame"] table {
         font-size: 11px !important;
-        width: 100% !important;
         border-collapse: collapse !important;
         table-layout: fixed !important;
     }
@@ -343,35 +347,52 @@ st.markdown(
         top: 0 !important;
         z-index: 10 !important;
     }
-    /* Уменьшаем высоту строк */
-    div[data-testid="stDataFrame"] div[role="row"] {
-        min-height: unset !important;
-        height: auto !important;
+    div[data-testid="stDataFrame"] tr:nth-child(even) td {
+        background-color: #fafafa !important;
     }
-    /* Сама оболочка таблицы без внутренних скроллов — растягивается по содержимому */
+    /* Строго 50px для выбранных колонок (по порядку: 1, 3, 6, 7) */
+    div[data-testid="stDataFrame"] th:nth-child(1),
+    div[data-testid="stDataFrame"] td:nth-child(1),
+    div[data-testid="stDataFrame"] th:nth-child(3),
+    div[data-testid="stDataFrame"] td:nth-child(3),
+    div[data-testid="stDataFrame"] th:nth-child(6),
+    div[data-testid="stDataFrame"] td:nth-child(6),
+    div[data-testid="stDataFrame"] th:nth-child(7),
+    div[data-testid="stDataFrame"] td:nth-child(7) {
+        width: 50px !important;
+        max-width: 50px !important;
+        min-width: 50px !important;
+    }
+    /* Таблица не растягивается на всю ширину — только по содержимому */
     div[data-testid="stDataFrame"] {
-        overflow: visible !important;
-    }
-    /* Немного убираем лишние отступы у заголовка раздела */
-    h2, .stSubheader {
-        margin-top: 4px !important;
-        margin-bottom: 4px !important;
+        max-width: none !important;
+        width: -moz-fit-content !important;
+        width: fit-content !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
 st.info(f"Показано строк: {len(filtered_df):,} из {total_rows:,}")
 
+# Ширина колонок: 50 px для Номер ревизии, Тип НП, ДМП, ДЖП
+column_config = {}
+for col in filtered_df.columns:
+    if col in ("Номер ревизии", "Тип НП", "ДМП", "ДЖП"):
+        if col_types.get(col) == "numeric":
+            column_config[col] = st.column_config.NumberColumn(col, width=50)
+        else:
+            column_config[col] = st.column_config.TextColumn(col, width=50)
+    elif col_types.get(col) == "numeric":
+        column_config[col] = st.column_config.NumberColumn(col)
+    else:
+        column_config[col] = st.column_config.TextColumn(col)
 
 st.dataframe(
     filtered_df,
-    use_container_width=True,
     hide_index=True,
-    column_config={
-        col: st.column_config.NumberColumn(col) if col_types.get(col) == "numeric" else st.column_config.TextColumn(col)
-        for col in filtered_df.columns
-    },
+    column_config=column_config,
 )
 
 if "Тип НП" in columns:
