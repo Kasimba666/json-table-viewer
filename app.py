@@ -70,6 +70,50 @@ def get_column_types(df: pd.DataFrame) -> Dict[str, str]:
     return types
 
 
+import html
+
+def format_json_html(obj, indent=0):
+    """Рекурсивно форматирует JSON-объект в HTML с подсветкой синтаксиса."""
+    spaces = "  " * indent
+    next_spaces = "  " * (indent + 1)
+
+    if obj is None:
+        return f'{spaces}<span class="json-null">null</span>'
+    elif isinstance(obj, bool):
+        return f'{spaces}<span class="json-bool">{str(obj).lower()}</span>'
+    elif isinstance(obj, (int, float)):
+        return f'{spaces}<span class="json-number">{obj}</span>'
+    elif isinstance(obj, str):
+        escaped = html.escape(obj, quote=True)
+        return f'{spaces}<span class="json-string">"{escaped}"</span>'
+    elif isinstance(obj, list):
+        if not obj:
+            return f'{spaces}<span class="json-punct">[]</span>'
+        items = []
+        for i, item in enumerate(obj):
+            comma = ',' if i < len(obj) - 1 else ''
+            items.append(f'{next_spaces}{format_json_html(item, indent + 1)}<span class="json-punct">{comma}</span>')
+        inner = '\n'.join(items)
+        return f'{spaces}<span class="json-punct">[</span>\n{inner}\n{spaces}<span class="json-punct">]</span>'
+    elif isinstance(obj, dict):
+        if not obj:
+            return f'{spaces}<span class="json-punct">{{}}</span>'
+        items = []
+        keys = list(obj.keys())
+        for i, key in enumerate(keys):
+            comma = ',' if i < len(keys) - 1 else ''
+            escaped_key = html.escape(key, quote=True)
+            items.append(
+                f'{next_spaces}<span class="json-key">"{escaped_key}"</span>'
+                f'<span class="json-punct">:</span> {format_json_html(obj[key], indent + 1)}'
+                f'<span class="json-punct">{comma}</span>'
+            )
+        inner = '\n'.join(items)
+        return f'{spaces}<span class="json-punct">{{</span>\n{inner}\n{spaces}<span class="json-punct">}}</span>'
+    else:
+        return f'{spaces}{html.escape(str(obj))}'
+
+
 if "json_data" not in st.session_state:
     st.session_state.json_data = None
 if "json_text" not in st.session_state:
@@ -221,44 +265,29 @@ col4.metric("Столбцов", len(columns))
 if st.session_state.validation_msg and st.session_state.validation_msg != "OK":
     st.warning(f"⚠️ {st.session_state.validation_msg}")
 
-st.subheader("✏️ Редактирование JSON")
-st.caption(
-    "Вы можете вручную исправить данные в текстовом поле ниже. "
-    "После изменений нажмите «Применить и перерисовать таблицу»."
-)
+import streamlit.components.v1 as components
 
-json_text = st.text_area(
-    "JSON-данные",
-    value=st.session_state.json_text,
-    height=400,
-    key="json_editor",
-    help="Редактируйте JSON напрямую. Убедитесь, что это валидный массив объектов.",
-)
+st.subheader("📄 Исходный JSON")
 
-col_apply, col_reset = st.columns([3, 1])
-with col_apply:
-    if st.button("🔄 Применить и перерисовать таблицу", type="primary", use_container_width=True):
-        data_new, err = load_json_from_text(json_text)
-        if err:
-            st.error(err)
-        else:
-            ok, msg, columns_new, count_new = validate_json(data_new)
-            if ok:
-                st.session_state.json_data = data_new
-                st.session_state.json_text = json_text
-                st.session_state.validation_msg = msg
-                st.session_state.columns = columns_new
-                st.session_state.row_count = count_new
-                st.success(f"✅ Данные обновлены: {count_new} строк")
-                st.rerun()
-            else:
-                st.error(msg)
-with col_reset:
-    if st.button("↩️ Сбросить к исходному", use_container_width=True):
-        st.session_state.json_text = json.dumps(
-            st.session_state.json_data, ensure_ascii=False, indent=2
-        )
-        st.rerun()
+html_json = format_json_html(st.session_state.json_data)
+
+components.html(
+    f"""
+    <style>
+    .json-key {{ color: #1a73e8 !important; font-weight: 600 !important; }}
+    .json-string {{ color: #0b8043 !important; }}
+    .json-number {{ color: #d97706 !important; }}
+    .json-bool {{ color: #6d28d9 !important; }}
+    .json-null {{ color: #6d28d9 !important; }}
+    .json-punct {{ color: #666666 !important; }}
+    </style>
+    <div style="background-color: #f8f9fa; border: 1px solid #e6e6e6; border-radius: 4px; padding: 8px; font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; line-height: 1.3; white-space: pre-wrap; word-wrap: break-word; overflow: visible; max-height: none; height: auto;">
+        <pre>{html_json}</pre>
+    </div>
+    """,
+    height=600,
+    scrolling=True,
+)
 
 st.divider()
 st.subheader("📋 Таблица")
@@ -399,4 +428,4 @@ if "Тип НП" in columns:
     st.caption("💡 Строки с заполненным «Тип НП» (Г./Д.) — группы поселений, без типа — подчинённые записи.")
 
 st.divider()
-st.caption("JSON Table Viewer — Streamlit версия. Редактируйте JSON в текстовом поле и нажимайте «Применить» для обновления таблицы.")
+st.caption("JSON Table Viewer — Streamlit версия.")
